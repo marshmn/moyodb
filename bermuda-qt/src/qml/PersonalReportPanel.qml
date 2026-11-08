@@ -375,10 +375,6 @@ Frame {
                         onClicked: panel.openGame(modelData)
                     }
                 }
-                Label {
-                    text: qsTr("Bermuda organises evidence; KataGo evaluates; you investigate.")
-                    wrapMode: Text.Wrap; Layout.fillWidth: true; font.italic: true
-                }
             }
         }
     }

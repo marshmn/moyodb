@@ -23,6 +23,7 @@ fn main() {
         QmlModule::new("org.bermuda.app")
             .qml_file("src/qml/Main.qml")
             .qml_file("src/qml/WholeGameReviewPanel.qml")
+            .qml_file("src/qml/StudyToolBar.qml")
             .qml_file("src/qml/NavigationHome.qml")
             .qml_file("src/qml/PersonalReportPanel.qml")
             .qml_file("src/qml/PersonalSnapshotsDialog.qml")

@@ -2931,11 +2931,32 @@ menuBar: MenuBar {
     function trialHome() {
         root.showBrowserTab(root.lastBrowserTabIndex)
     }
+    property string studySaveMessage: ""
+    function saveCurrentStudy() {
+        if (!gameController.saveStudyToLibrary()) {
+            studySaveMessage = gameController.error_message
+            return
+        }
+        studyLibraryDialog.refreshEntries()
+        studySaveMessage = qsTr("Saved in Saved studies. Further edits save automatically.")
+    }
     function trialTool(mode) {
         root.wholeGameReviewActive = false
         root.showStudy()
-        if (mode === "notes") {
+        boardPane.annotationTool = ""
+        boardPane.sgfEditTool = ""
+        if (mode !== "pattern") boardPane.selectingPattern = false
+        if (mode === "notes" || mode === "moves") {
             studyToolsTabs.currentIndex = 0
+            boardPane.investigationMode = ""
+            studyActionTabs.currentIndex = mode === "moves" ? 1 : 0
+            if (mode === "moves") {
+                studyNextColour.currentIndex = 0
+                boardPane.sgfEditTool = "move"
+            }
+        } else if (mode === "influence") {
+            studyToolsTabs.currentIndex = 2
+            boardPane.investigationMode = ""
         } else {
             studyToolsTabs.currentIndex = 1
             boardPane.investigationMode = mode
@@ -3192,6 +3213,14 @@ menuBar: MenuBar {
         root.studyPaneMode = "document"
         root.studyReplacementFromBrowser = false
         root.replacementHadStudyWorkspace = false
+        // Opening a game is not an implicit selection of Game / notes.
+        // Every first tool click must make an explicit state transition.
+        studyToolsTabs.currentIndex = -1
+        studyActionTabs.currentIndex = 0
+        boardPane.annotationTool = ""
+        boardPane.sgfEditTool = ""
+        boardPane.investigationMode = ""
+        boardPane.selectingPattern = false
     }
 
     function cancelStudyReplacement() {
@@ -3759,26 +3788,12 @@ menuBar: MenuBar {
             enabled: !gameList.searchInProgress && !gameController.whole_game_busy
             onClicked: root.trialReturnToSource()
         }
-        Button { visible: root.navigationTrial && !root.playingGame && boardPane.selectedGame !== null; text: qsTr("Game / notes"); onClicked: root.trialTool("notes") }
         Button {
             visible: root.navigationTrial && root.canAddOpenedGame
             text: qsTr("Add to My games")
             onClicked: root.addCurrentOpenedGameToMyGames()
         }
-        Button {
-            visible: root.navigationTrial
-            text: qsTr("KataGo")
-            enabled: !root.playingGame && (boardPane.selectedGame !== null || (root.studyPaneMode === "joseki" && !josekiModel.loading))
-            onClicked: {
-                if (root.studyPaneMode === "joseki") root.beginJosekiPatternSearch(true)
-                else root.trialTool("katago")
-            }
-        }
-        Button {
-            visible: root.navigationTrial && boardPane.selectedGame !== null
-            text: qsTr("Influence")
-            onClicked: { root.showStudy(); studyToolsTabs.currentIndex = 2 }
-        }
+
 
 
         anchors {
@@ -4930,38 +4945,39 @@ menuBar: MenuBar {
                                             Layout.maximumHeight: implicitHeight
                                         }
 
-                                        RowLayout {
-                                            id: patternToolControls
+                                        StudyToolBar {
+                                            id: studyToolBar
                                             visible: root.navigationTrial && !root.playingGame
                                                      && boardPane.selectedGame !== null
                                             Layout.fillWidth: true
                                             Layout.leftMargin: 8
                                             Layout.rightMargin: 8
-                                            spacing: 4
-                                            Button {
-                                                visible: root.navigationTrial
-                                                text: qsTr("Pattern search")
-                                                enabled: !root.playingGame && (boardPane.selectedGame !== null || root.studyPaneMode === "joseki")
-                                                onClicked: {
-                                                    if (root.studyPaneMode === "joseki") root.beginJosekiPatternSearch()
-                                                    else root.trialTool("pattern")
-                                                }
+                                            canEditMoves: !boardPane.editingPosition
+                                            enabled: !gameList.searchInProgress && !gameController.whole_game_busy
+                                            activeTool: studyToolsTabs.currentIndex === 2 ? "influence"
+                                                : studyToolsTabs.currentIndex === 1 ? boardPane.investigationMode
+                                                : studyToolsTabs.currentIndex === 0
+                                                    ? (boardPane.sgfEditTool === "move" ? "moves" : "notes") : ""
+                                            onToolSelected: function(tool) { root.trialTool(tool) }
+                                            onSearchOptionsRequested: function(x, y) { trialPatternOptions.popup(x, y) }
+                                            onSaveRequested: root.saveCurrentStudy()
+                                            Menu {
+                                                id: trialPatternOptions
+                                                MenuItem { action: selectAreaAction }
+                                                MenuItem { action: professionalMatchesAction }
+                                                MenuItem { action: myMatchesAction }
+                                                MenuItem { action: newSearchAction }
+                                                MenuSeparator {}
+                                                MenuItem { action: handicapAction }
                                             }
-                                            Button {
-                                                visible: root.navigationTrial
-                                                text: qsTr("Search options")
-                                                onClicked: trialPatternOptions.open()
-                                                Menu {
-                                                    id: trialPatternOptions
-                                                    MenuItem { action: selectAreaAction }
-                                                    MenuItem { action: professionalMatchesAction }
-                                                    MenuItem { action: myMatchesAction }
-                                                    MenuItem { action: newSearchAction }
-                                                    MenuSeparator {}
-                                                    MenuItem { action: handicapAction }
-                                                }
-                                            }
-                                            Item { Layout.fillWidth: true }
+                                        }
+                                        Label {
+                                            visible: root.studySaveMessage.length > 0
+                                            text: root.studySaveMessage
+                                            Layout.fillWidth: true
+                                            Layout.leftMargin: 8
+                                            Layout.rightMargin: 8
+                                            wrapMode: Text.Wrap
                                         }
 
                                         TabBar {
@@ -4977,7 +4993,7 @@ menuBar: MenuBar {
                                             Layout.leftMargin: 8
                                             Layout.rightMargin: 8
 
-                                            currentIndex: 0
+                                            currentIndex: -1
 
                                             onCurrentIndexChanged: {
                                                 /*
@@ -6473,6 +6489,21 @@ RowLayout {
                             }
                         }
 
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 4
+                            enabled: !josekiModel.loading && josekiModel.study_sgf_path.length > 0
+                                     && !gameList.searchInProgress && !gameController.whole_game_busy
+                            Button { text: qsTr("Pattern search"); onClicked: root.beginJosekiPatternSearch() }
+                            Button { text: qsTr("KataGo"); onClicked: root.beginJosekiPatternSearch(true) }
+                            Button {
+                                text: qsTr("Influence")
+                                checkable: true
+                                checked: goBoard.influenceVisible
+                                onClicked: goBoard.influenceVisible = !goBoard.influenceVisible
+                            }
+                        }
+
                         Label {
                             Layout.fillWidth: true
                             visible: josekiModel.status_message.length > 0
@@ -6662,6 +6693,7 @@ RowLayout {
             visible: true
 
             property var selectedGame: null
+            onSelectedGameChanged: root.studySaveMessage = ""
 
 
             property string annotationTool: ""
@@ -8658,7 +8690,8 @@ RowLayout {
                           onPatternResizeCancelled: root.finishJosekiResize(true)
 
                           onContinuationPointClicked: function(x, y, count) {
-                              if (root.wholeGameReviewActive) {
+                              if (root.wholeGameReviewActive || boardPane.sgfEditTool === "move"
+                                      || boardPane.annotationTool.length > 0) {
                                   goBoard.pointClicked(x, y)
                                   return
                               }

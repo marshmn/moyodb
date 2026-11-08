@@ -47,3 +47,27 @@ pattern search, filter by a continuation, open a matching game and return to
 source. Check joseki return and KataGo review separately. Restart with an
 existing profile and with a fresh profile: both must use the unified layout,
 with no option to select the old UI.
+
+## Study controls repair — 8 November 2026
+
+Study tools now share a wrapping toolbar below comments. Game / notes opens
+annotation tools. Moves / variations enters move entry directly: play a different
+continuation to branch, follow an existing continuation without duplicating it,
+and use Done to leave move entry. Pattern search, Search options, KataGo and
+Influence remain together here. Switching tools clears active move/annotation
+entry so a hidden control cannot consume board clicks. Joseki keeps local
+Pattern search, KataGo and Influence controls.
+
+Save study explicitly retains an opened game even before the first edit. It uses
+the existing Study Library persistence, including all SGF variations/comments,
+and subsequent saves update the same file. It leaves external SGFs unchanged.
+Successful saves refresh Saved studies and show confirmation; failures are shown
+in the Study area. Automatic saving after edits continues.
+
+The strapline appears only in About. Reopen a snapshot report from Bermuda to
+regenerate its cached HTML without the former footer; frozen evidence is unchanged.
+
+Opening a fresh game starts with no Study tool selected. Game / notes therefore
+opens its tools on the first click. Returning to a retained workspace still
+restores its existing selection. Search options is the dropdown beside Pattern
+search; the dropdown selects pattern mode before opening its menu.

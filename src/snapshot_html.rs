@@ -58,7 +58,7 @@ body{font:16px/1.5 system-ui,sans-serif;color:#202e35;max-width:1050px;margin:32
     write!(out, "<style>@page{{@bottom-left{{content:\"Bermuda · snapshot #{id}\";font-size:8pt}}@bottom-right{{content:counter(page);font-size:8pt}}}}</style>").unwrap();
     let r = &s.report;
     out.push_str(&visual_summary(s)?);
-    out.push_str("<p class=\"next no-print\"><strong>What next?</strong> Explore these positions in Bermuda. Different groups with comparable analysis can help you investigate changes in play. Deeper analysis of the same games improves the evidence. A recurring weakness still needs investigation.</p><p class=\"muted no-print\">Bermuda organises evidence; KataGo evaluates; you investigate.</p><section class=details><h2>Detailed tables</h2>");
+    out.push_str("<p class=\"next no-print\"><strong>What next?</strong> Explore these positions in Bermuda. Different groups with comparable analysis can help you investigate changes in play. Deeper analysis of the same games improves the evidence. A recurring weakness still needs investigation.</p><section class=details><h2>Detailed tables</h2>");
     out.push_str("<p>This is a fixed copy of saved evidence, not a live report. New imports, name edits and later analysis do not change it. Names and your colour are those saved with this group. Partial games contribute only assessed moves.</p><h2>Games in this group</h2><table><thead><tr><th>Date</th><th>Black</th><th>White</th><th>You</th><th>Result</th><th>Coverage</th></tr></thead><tbody>");
     for (m, run) in s.group.members.iter().zip(&s.runs) {
         let coverage = if m.colour.is_none() {

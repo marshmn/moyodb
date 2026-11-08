@@ -93,6 +93,10 @@ mod ffi {
         fn study_library_path(self: &BermudaApp) -> QString;
 
         #[qinvokable]
+        #[cxx_name = "saveStudyToLibrary"]
+        fn save_study_to_library(self: Pin<&mut BermudaApp>) -> bool;
+
+        #[qinvokable]
         #[cxx_name = "studyLibraryEntriesJson"]
         fn study_library_entries_json(self: Pin<&mut BermudaApp>) -> QString;
 
@@ -1096,6 +1100,27 @@ impl ffi::BermudaApp {
         match study_library_root() {
             Ok(path) => QString::from(path.to_string_lossy().as_ref()),
             Err(_) => QString::default(),
+        }
+    }
+
+    fn save_study_to_library(mut self: Pin<&mut Self>) -> bool {
+        self.as_mut().set_error_message(QString::default());
+        let result = (|| -> Result<LoadedDocument, String> {
+            if self.rust().whole_game_busy || self.rust().katago_analysis_in_progress {
+                return Err("Pause analysis before saving the study".into());
+            }
+            let document = self.rust().loaded_document.as_ref().ok_or("No game or position is open")?;
+            saved_study_copy(document)
+        })();
+        match result {
+            Ok(document) => {
+                self.as_mut().rust_mut().loaded_document = Some(document);
+                true
+            }
+            Err(error) => {
+                self.as_mut().set_error_message(QString::from(error));
+                false
+            }
         }
     }
 
@@ -4229,6 +4254,13 @@ fn step_study_history(
     }
 }
 
+// Commit the in-memory destination only after persistence succeeds.
+fn saved_study_copy(document: &LoadedDocument) -> Result<LoadedDocument, String> {
+    let mut saved = document.clone();
+    persist_study_document(&mut saved)?;
+    Ok(saved)
+}
+
 fn persist_study_document(document: &mut LoadedDocument) -> Result<(), String> {
     let mut collection = study_collection(document)?;
 
@@ -5227,19 +5259,32 @@ fn load_game_document(project_path: &str, game_id: i64) -> Result<LoadedDocument
 
     let store = project.game_store().map_err(|error| error.to_string())?;
 
-    let positions = store
-        .positions(game_id)
-        .map_err(|error| error.to_string())?;
+    let mut record = store.load(game_id).map_err(|error| error.to_string())?;
+    record.metadata.black_player = game.black_player.clone();
+    record.metadata.white_player = game.white_player.clone();
+    record.metadata.black_rank = game.black_rank.clone();
+    record.metadata.white_rank = game.white_rank.clone();
+    record.metadata.date = game.game_date.clone();
+    record.metadata.event = game.event.clone();
+    record.metadata.result = game.result.clone();
+    record.metadata.komi = game.komi;
+    let positions = replay_positions(&record).map_err(|error| error.to_string())?;
+    // Retain source metadata when this database game becomes a saved study.
+    let sgf = write_game_record_sgf(&record).map_err(|error| error.to_string())?;
+    let collection = parse_collection(sgf.as_bytes()).map_err(|error| error.to_string())?;
 
     Ok(LoadedDocument {
         description: format!("game {game_id}"),
         positions,
         source_comments: Vec::new(),
         study_tree: None,
-        study: StudyDocumentState::new(StudyOrigin::ProjectGame {
-            project_path: project_path.to_owned(),
-            game_id,
-        }),
+        study: StudyDocumentState {
+            collection: Some(collection),
+            ..StudyDocumentState::new(StudyOrigin::ProjectGame {
+                project_path: project_path.to_owned(),
+                game_id,
+            })
+        },
         editable: false,
         playable: false,
         finished: false,
@@ -6039,6 +6084,37 @@ fn board_stones_json(board: &Board) -> QString {
 #[cfg(test)]
 mod played_game_record_tests {
     use super::*;
+
+    #[test]
+    fn study_save_preserves_variations_comments_and_reuses_destination() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source.sgf");
+        let original = "(;SZ[19]PB[Me]PW[Opponent]BR[2k]WR[1d];B[dd]C[note](;W[pp])(;W[qq]C[variation]))";
+        fs::write(&source, original).unwrap();
+        let mut document = load_sgf_document(source.to_str().unwrap()).unwrap();
+        // Isolate the managed destination from the real user's Study Library.
+        let destination = temp.path().join("saved.sgf");
+        document.study.library_path = Some(destination.clone());
+        let saved = saved_study_copy(&document).unwrap();
+        let first = fs::read_to_string(&destination).unwrap();
+        let collection = parse_collection(first.as_bytes()).unwrap();
+        assert_eq!(collection.trees[0].variations.len(), 2);
+        assert_eq!(collection.trees[0].sequence[1].first("C"), Some("note"));
+        assert_eq!(collection.trees[0].sequence[0].first("WR"), Some("1d"));
+        assert!(StudyDocumentMetadata::from_collection(&collection).unwrap().is_some());
+        let again = saved_study_copy(&saved).unwrap();
+        assert_eq!(again.study.library_path, Some(destination.clone()));
+        assert_eq!(fs::read_to_string(&destination).unwrap(), first);
+        assert_eq!(fs::read_to_string(&source).unwrap(), original);
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+        // A failed save leaves the source document's state untouched.
+        document.study.library_path = Some(temp.path().join("missing").join("blocked"));
+        fs::write(temp.path().join("missing"), "not a directory").unwrap();
+        assert!(saved_study_copy(&document).is_err());
+        assert_eq!(document.study.library_path, Some(temp.path().join("missing").join("blocked")));
+        assert_eq!(fs::read_to_string(&source).unwrap(), original);
+    }
+
 
     #[test]
     fn candidate_coordinates_convert_both_edges_and_reject_out_of_bounds() {

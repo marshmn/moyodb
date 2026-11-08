@@ -2,7 +2,7 @@
 
 **Status:** Canonical project-wide work plan.
 
-**Last updated:** 7 November 2026.
+**Last updated:** 8 November 2026.
 
 ## Purpose
 
@@ -467,6 +467,12 @@ The Windows tester reports that resetting AppData permits startup, but creating
 even a 30-game database causes the next launch to freeze/crash on an earlier
 build. Obtain the exact version and preserve the failing profile/database; compare
 a current-build relaunch with manual database opening. The cause is not yet known.
+
+**8 November Study workflow repair:** keep the strapline in About only; group
+Game/notes, Moves/variations, Pattern search, KataGo and Influence below the
+comments. Expose branching directly and add explicit Save study with confirmation,
+retaining automatic saving after edits and updating an existing saved study.
+Interactive acceptance of this repair is pending before resuming 4B.
 
 ### Planned: remote/cloud KataGo analysis
 
